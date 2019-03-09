@@ -1,0 +1,40 @@
+---
+title: "Primers_passos"
+author: "Ferran_Pinsach"
+date: "February 27, 2019"
+output: html_document
+---
+
+# Analysis on Longitudinal Data: Group Project
+
+## Preliminar Study
+
+Chunk 1: Charging data and summary. RiverSide, numbirths and ID are declared as factors.
+```{r}
+
+data<-read.table(paste0(getwd(),"/dades.txt"),header=T,fill = TRUE,na.strings="")
+head(data)
+
+summary(data)
+
+data$RiverSide<-as.factor(data$RiverSide)
+data$numbirths<-as.factor(data$numbirths)
+data$ID<-as.factor(data$ID)
+
+```
+
+Chunk 2: Plots
+
+```{r}
+#Grouped data in library nlme
+library(nlme)
+
+data_GD<-groupedData(PCV~Hb|ID,data,outer=~ID,labels=list(y="packed cell volume"),units=list(y="Time"))
+
+#Grouped data-Graphical representation
+plot(data_GD)
+plot(GrowthGV2,outer=T)
+plot(GrowthGV2[GrowthGV2$child==1,])
+plot(by(GrowthGV2$height,GrowthGV2$age,mean),type="l",lty=1,lwd=1)
+```
+
