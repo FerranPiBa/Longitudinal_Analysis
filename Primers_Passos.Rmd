@@ -2,39 +2,90 @@
 title: "Primers_passos"
 author: "Ferran_Pinsach"
 date: "February 27, 2019"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 # Analysis on Longitudinal Data: Group Project
 
 ## Preliminar Study
 
-Chunk 1: Charging data and summary. RiverSide, numbirths and ID are declared as factors.
+### Chunk 1: Charging data and summary. RiverSide, numbirths and ID are declared as factors.
 ```{r}
 
-data<-read.table(paste0(getwd(),"/dades.txt"),header=T,fill = TRUE,na.strings="")
+data<-read.table(paste0(getwd(),"/cattle_mes dades_b.csv"),header=T,fill = TRUE,na.strings="",sep=";")
 head(data)
+colnames(data)[1]<-"ID"
+data<-data[-91,]
 
 summary(data)
+colnames(data)
 
+data$Hb<-as.numeric(data$Hb)
+data$PCV<-as.numeric(data$PCV)
 data$RiverSide<-as.factor(data$RiverSide)
 data$numbirths<-as.factor(data$numbirths)
 data$ID<-as.factor(data$ID)
+data$Time<-as.factor(data$Time)
 
 ```
+We have observations of ten different cows. For each cow we have 9 differents mesurements, one per timepoint and dose level. 
 
-Chunk 2: Plots
+
+
+### Chunk 2: Plots
 
 ```{r}
 #Grouped data in library nlme
 library(nlme)
+# 
+# data_GD<-groupedData(PCV~Time|ID/Dose,data,outer=~RiverSide,labels=list(y="PCV"))
+# 
+# #Grouped data-Graphical representation
+# 
+# plot(data_GD[data_GD$RiverSide==0,],displayLevel = "ID")
+# plot(data_GD[data_GD$RiverSide==1,])
+# plot(data_GD)
+# plot(data_GD,outer=T)
+# plot(data_GD[data_GD$Time==1,])
+# plot(by(GrowthGV2$height,GrowthGV2$age,mean),type="l",lty=1,lwd=1)
+```
 
-data_GD<-groupedData(PCV~Hb|ID,data,outer=~ID,labels=list(y="packed cell volume"),units=list(y="Time"))
+```{r}
+library(lme4)
+library(lattice)
 
-#Grouped data-Graphical representation
-plot(data_GD)
-plot(GrowthGV2,outer=T)
-plot(GrowthGV2[GrowthGV2$child==1,])
-plot(by(GrowthGV2$height,GrowthGV2$age,mean),type="l",lty=1,lwd=1)
+xyplot(PCV~Time,groups=Dose,data,type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time|ID*Dose,data,type="l")
+
+xyplot(PCV~Time,groups=Dose,data[data$Dose=="H",],type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time,groups=Dose,data[data$Dose=="M",],type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time,groups=Dose,data[data$Dose=="L",],type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+
+xyplot(PCV~Time,groups=Dose,data[data$RiverSide==1,],type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time,groups=Dose,data[data$RiverSide==0,],type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+
+
+```
+
+#### First plot: 
+
+1. It seems that PCV value has a positive relation with Dose*Time.
+2. Grouping by Dose there is a high variability at intercept level. The intercepts for each dose are mixed.
+3. The slopes have high variability too. 
+4. There is considerable variability between and within doses. 
+5. When RiverSide = 0 there is less variability within groups.
+
+As for each cow we have observations of the PCV for all doses across time so the interactive variable Dose*Time could be considered. On the other hand, in order to fit the variability within groups RiverSide could be considered too.
+
+
+**Question** For each cow we have 9 observations (3 timpePoints x 3 diff. doses). Are the three mesurements per dose independent between them? Can we consider 9 different timepoints instead of 3x3?
+
+```{r}
+
+data_noNA<-na.omit(data)
+(data.lis<-lmList(PCV~Dose|ID/Time,data_noNA))
+plot(intervals(data.lis))
 ```
 
