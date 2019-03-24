@@ -1,0 +1,225 @@
+---
+title: "Entrega_Long"
+output: html_document
+---
+
+# **Charging Data and librarys**
+
+```{r}
+library(nlme)
+library(lme4)
+library(lattice)
+```
+
+
+```{r}
+data<-read.table(paste0(getwd(),"/cattle_mes dades.csv"),header=T,fill = TRUE,na.strings="",sep=",")
+
+data<-data[-91,]
+summary(data)
+
+
+```
+ID, Time, numbirths and RiverSide must be factor variables. On the other hand, Dose levels should be changed to L=1, M=2 and H=3 to aboyd ordering problems.
+```{r}
+
+colnames(data)[1]<-"ID"
+
+dose<-as.numeric(data$Dose)
+dose[data$Dose=="H"]=3
+dose[data$Dose=="M"]=2
+dose[data$Dose=="L"]=1
+data$Dose<-dose
+data$Dose<-as.factor(data$Dose)
+
+data<-data[order(data$ID,data$Time,data$Dose),]
+
+
+data$RiverSide<-as.factor(data$RiverSide)
+data$numbirths<-as.factor(data$numbirths)
+data$ID<-as.factor(data$ID)
+data$Time<-as.factor(data$Time)
+```
+
+# **Data description.**
+
+```{r}
+with(data, data[ID==1,])
+```
+
+Dose variable had 3 different measurements: Low (1), Medium (2) and High (3). Also, all cows had 3 different observation across time and for each time were available three values corresponding to the three different doses.
+
+So a cow could think a cow as a group where inside it there were 3 subgroups corresponding to each dose level.
+
+Our variable of interest was PCV. PCV was measuring the packed cell volume. A high PCV value was expected in healthy cows.
+
+#Graphical inspection
+
+Grouping by Dose treatment and ID, we would see the behavior of the PCV (variable of interest) across time. 
+
+```{r}
+par(mfrow=c(1,2))
+
+xyplot(PCV~Time|Dose,groups=ID,data,type="o",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time|ID*Dose,data,type="o")
+
+```
+
+1. **Intercept:** Low dose had the narrowest intercept range and high dose had the largest intercept range. 
+2. **Slope:** The profiles seemed to be lineal and some cuadratic, too. Actually, except a few, the evolution of cows grouped by Dose was increasing.
+3. **End point:** At three dose levels there were much variability at the last timepoint than in the intercept. High dose had the largest values and low and mediu were close one each other. 
+
+Now, we want see if RiverSide helps us to descirbe our problem:
+
+```{r}
+xyplot(PCV~Time|Dose*RiverSide,groups=ID,data,type="l",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+```
+
+In this plot we can see that if cows did not live near the river (RiverSide=0), then there was less variability within group at intercpet and slope level. So, there was more heterogeneity near the river (RiverSide=1). Near the river whenever the dose was increasing we can observe an increase of the variability.
+
+Now, we want see the effect of grouping our inidivuals between their Hb level. So, we are going to consider as low concentration of hemoglobin (g/dL) when Hb is less than 14 and we are going to consider a high concentration when Hb is up to 17.5 g/dL, otherwise normal concentration is going to be considered.
+
+```{r}
+data$Hb_L <- NA
+data$Hb_L<-as.factor(ifelse(data$Hb < 14,"1_Low",ifelse(data$Hb>17.5,"3_High","2_Normal")))
+```
+
+```{r}
+xyplot(PCV~Time|Dose*Hb_L,groups=ID,data,type="p",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+```
+
+a) **Dose Low (1,orange):** When low dose was given a great percentage of cows belonged to low Hb (Hb_L = 1,green). When dose was high none observations were registred.
+
+b) **Dose Medium (2, orange):** As before, a great percentage of cows belonged to low Hb (Hb_L = 1,green). When we observe data in Medium and High Hb (Hb_L = 2 and 3, green) any individual was registred at timepoint one.
+
+c) **Dose High (3, orange):** No observations was recorded at timepoint three when Hb level was low. Additionaly, when Hb level was high there was not observations at timepoint one and there ware a considerable concentration of observations at timepoint one and two.
+
+  In general, at timepoint one a great part of observations belongs to low Hb level. **Als temps 2 i 3, a mesura que incrementem la dosi, el nivell baix de Hb va perdent força i aquests dos timepoints s'acaben repartint entre nivells normals i alts de Hb. FALTA PARLAR DE LA VARIABLE PCV!!!!!!!!!!!!!!!!**
+  
+  
+```{r}
+xyplot(PCV~Hb|Dose,groups=ID,data,type="p",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+```
+
+For all time points there are a positive correlation between Hb variable and PCV. The variability between timepoints increase, but not a lot. The behaivour at dose lowe and medium are more or less the same, while at high dose the distance between the minimum and the maximum is the highest. So, it seems that if we increase the dose, then PCV and Hb will take larger values.
+
+**Questions:** Will Dose have a positive impact in PCV and Hb, at the same time, or only in one and this will have an impact in the other? 
+
+```{r}
+xyplot(PCV~numbirths|Dose,groups=ID,data,type="p",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+xyplot(PCV~Time|numbirths*Dose,groups=ID,data,type="p",auto.key = list(space = "right", points = FALSE, lines = TRUE))
+```
+
+When _numbirths_<6 we can see that the distances between timepoints of the same cow are increasing across dose level. On the other hand, when _numbirths_ $\geqslant$ 6 then profiles are also growing but not with tha same proportion.
+
+# **Summary Statistics**
+
+Our variable of interest is PCV and we expect low values of it for sick cows and higher values for cows that are at the end of the recovery process or that are already healthy.
+
+As we are interested with PCV range as a first summary statistic we are going to take maximum and minimum values at each timepoint grouped by the differents levels of dose. 
+
+```{r}
+MAX<-matrix(0,ncol=3,nrow=3)
+MIN<-matrix(0,ncol=3,nrow=3)
+MEAN<-matrix(0,ncol=3,nrow=3)
+
+for(i in 1:3){
+  MAX[,i]<-tapply(data$PCV[data$Dose==i],data[data$Dose==i,]$Time,max,na.rm=T)
+  MIN[,i]<-tapply(data$PCV[data$Dose==i],data[data$Dose==i,]$Time,min,na.rm=T)
+  MEAN[,i]<-tapply(data$PCV[data$Dose==i],data[data$Dose==i,]$Time,mean,na.rm=T)
+}
+
+plot(y=MAX[,1],x=c(1,2,3),type="o",col="red",ylim =c(min(MIN)-5,max(MAX)),ylab="MAX PCV value", xlab="Time",main="MAX & MIN values of PCV at each Time grouped by Dose") #MAX
+lines(y=MAX[,2],x=c(1,2,3),type="o",col="green")
+lines(y=MAX[,3],x=c(1,2,3),type="o",col="blue")
+lines(y=MIN[,1],x=c(1,2,3),type="o",col="red",pch=12,lwd=3) #MIN 
+lines(y=MIN[,2],x=c(1,2,3),type="o",col="green",pch=12,lwd=3)
+lines(y=MIN[,3],x=c(1,2,3),type="o",col="blue",pch=12,lwd=3)
+# lines(y=MEAN[,1],x=c(1,2,3),type="o",col="red",pch=12,lwd=3,lty=3) #MEAN 
+# lines(y=MEAN[,2],x=c(1,2,3),type="o",col="green",pch=12,lwd=3,lty=3)
+# lines(y=MEAN[,3],x=c(1,2,3),type="o",col="blue",pch=12,lwd=3,lty=3)
+legend("topleft",c("Low","Medium","High"),col=c("red","green","blue"),lty=1,bty="n")
+```
+
+In this plot we could see the evolution of the maximum (normal width) and the minimun (bold width) across time grouped by dose. At first timepoint the range of values are narrow. We can observe that High dose has the lowest minimum value and the largest maximum one. With the passage of time, all profiles range (minimum, maximum) increases and it does means that the variability is increasing across time for each dose level. 
+
+1. Low level: The minimums values seem to be constant and between timepoint two and three was when the range increase more.
+2. Medium level: The variability was increased between timepoint one and two, but it was constant from two to three.
+3. High level: This profile that presents larger range and also it was the profile that presented the highest variability increase between timepoints.
+
+Now, we want see how the variance structure is.
+
+```{r}
+myvars <- c("PCV")
+
+resp1<- data[ which(data$Dose==1),  ]
+resp1 <- resp1[myvars]
+#summary(resp1)
+
+resp2<- data[ which(data$Dose==2), ]
+resp2 <- resp2[myvars]
+#summary(resp2)
+
+resp3<- data[ which(data$Dose==3), ]
+resp3 <- resp3[myvars]
+#summary(resp3)
+
+matrRESP<-NULL
+matrRESP<-cbind(resp1, resp2, resp3)
+
+
+#  Variance and Covariance matrix- relation between 2
+# measurements in the response variable
+cov(matrRESP,use="complete.obs")
+
+# Correlations matrix
+cor(matrRESP,use="complete.obs")
+```
+
+In the previous results, covariance and correlation matrixs, we can see that variance of the PCV between the labels Low and Medium are close. When the dose is High the variance of PCV is higher than the others. Also, exist a strong positive correlation between data when it is grouped by Dose. 
+
+As we said before, the variances between Low and Medium dose are quite similar, aproximetely 5.1, and this are consistent with the graphic that we saw. Also, the variance value correspondig to High dose has a variance of 14.8 wich is also consistent with the graphic mentioned before. The variance of this High dose it could be telling us that this level of Dose has not a clear effect in the PCV value.
+
+It's important to observe that here we are not distinguish between Dose and Timpoint. AT THIS MOMENT THIS ANALYSIS IS NOT POSSIBLE BECAUSE OF THE NUMBER OF MISSINGS (TOO MUCH).
+```{r echo=FALSE, results=FALSE}
+myvars <- c("PCV")
+
+resp11<- data[ which(data$Dose==1 & data$Time==1),  ]
+resp11 <- resp11[myvars]
+
+resp12<- data[ which(data$Dose==1 & data$Time==2),  ]
+resp12 <- resp12[myvars]
+
+resp13<- data[ which(data$Dose==1 & data$Time==3),  ]
+resp13 <- resp13[myvars]
+
+resp21<- data[ which(data$Dose==2 & data$Time==1),  ]
+resp21 <- resp21[myvars]
+
+resp22<- data[ which(data$Dose==2 & data$Time==2),  ]
+resp22 <- resp22[myvars]
+
+resp23<- data[ which(data$Dose==2 & data$Time==3),  ]
+resp23 <- resp23[myvars]
+
+resp31<- data[ which(data$Dose==3 & data$Time==1),  ]
+resp31 <- resp31[myvars]
+
+resp32<- data[ which(data$Dose==3 & data$Time==2),  ]
+resp32 <- resp32[myvars]
+
+resp33<- data[ which(data$Dose==3 & data$Time==3),  ]
+resp33 <- resp33[myvars]
+
+matrRESP<-NULL
+matrRESP<-cbind(resp11, resp12, resp13,resp21, resp22, resp23,resp31, resp32, resp33)
+
+
+#  Variance and Covariance matrix- relation between 2
+# measurements in the response variable
+cov(matrRESP,use="na.or.complete")
+
+# Correlations matrix
+cor(matrRESP,use="complete.obs")
+```
+
